@@ -110,7 +110,7 @@ $("od").value = $("od").min = $("do").min = D.obdobi[0];
 $("do").value = $("od").max = $("do").max = D.obdobi[1];
 [...new Set(R.map(r => r.odvozeno.typ))].forEach(t => $("typ").insertAdjacentHTML("beforeend", `<option>${esc(t)}</option>`));
 const chk = (box, vals) => vals.forEach(v => $(box).insertAdjacentHTML("beforeend", `<label><input type="checkbox" data-g="${box}" value="${esc(v)}"> ${esc(v)}</label>`));
-chk("objekty", [...[...new Set(R.flatMap(r => r.odvozeno.objekty))].sort().map(o => "objekt " + o), "bez určení"]);
+chk("objekty", [...[...new Set(R.flatMap(r => r.odvozeno.objekty))].sort().map(o => "objekt " + o)]);
 chk("profese", [...new Set(R.flatMap(r => r.odvozeno.profese))]);
 const checked = g => [...document.querySelectorAll(`input[data-g=${g}]:checked`)].map(i => i.value);
 const hay = R.map(r => norm([r.datum, fmtD(r.datum), ...Object.values(r.b1), ...Object.values(r.b2), ...Object.values(r.c_zapis)].join(" ")));
@@ -125,7 +125,7 @@ function filtered() {
     if ($("f-prek").checked && !o.prekazka) return false;
     if ($("f-jedn").checked && !o.jednani) return false;
     if ($("f-foto").checked && !o.fotky) return false;
-    if (ob.length && !ob.some(v => v === "bez určení" ? !o.objekty.length : o.objekty.includes(v.slice(-1)))) return false;
+    if (ob.length && !ob.some(v => o.objekty.includes(v.slice(-1)))) return false;
     if (pr.length && !pr.some(v => o.profese.includes(v))) return false;
     return q.every(w => hay[i].includes(w));
   });
@@ -183,7 +183,7 @@ function snippet(r) {  // při hledání ukaž úryvek pole se shodou, jinak za�
 function list(vis) {
   $("list").innerHTML = vis.map(r => `<div class="it${sel === r.datum ? " sel" : ""}" data-d="${r.datum}">
     <b>${fmtD(r.datum)}</b> <span class="mut">${r.den_tydne}</span> <span class="tag">${esc(r.odvozeno.typ)}</span>
-    ${r.odvozeno.objekty.map(o => `<span class="tag">obj. ${o}</span>`).join("")}${r.odvozeno.prekazka ? '<span class="tag">překážka</span>' : ""}${r.odvozeno.fotky ? `<span class="tag">foto ${r.odvozeno.fotky}</span>` : ""}
+    ${r.odvozeno.objekty.map(o => `<span class="tag">obj. ${o}</span>`).join("")}${r.odvozeno.prekazka ? '<span class="tag">pokyn / překážka</span>' : ""}${r.odvozeno.fotky ? `<span class="tag">foto ${r.odvozeno.fotky}</span>` : ""}
     <div class="mut">${hl(snippet(r))}</div></div>`).join("") || '<p class="mut">Filtru neodpovídá žádný záznam.</p>';
 }
 function dl(r) {
