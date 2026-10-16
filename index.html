@@ -52,7 +52,7 @@ svg text{fill:var(--mut);font-size:10px}.charts svg{max-height:210px;display:blo
 <header>
   <h1 id="stavba">Stavební deník</h1>
   <div class="mut" id="ident"></div>
-  <div style="margin-top:6px"><span class="int">Veřejná verze – osoby uvedeny rolí, bez zdrojových podkladů</span> <span class="mut" id="gen"></span></div>
+  <div style="margin-top:6px"><span class="int">Veřejná verze – zhotovitel uveden rolí, bez zdrojových podkladů</span> <span class="mut" id="gen"></span></div>
 </header>
 <main>
 <aside>
@@ -315,7 +315,7 @@ const enc = s => new TextEncoder().encode(s).buffer;
       html += `<p>public_manifest.sha256 na webu: ${fh === mh ? '<span class="ok">✓ shodný se stránkou</span>' : '<span class="bad">✗ liší se od stránky</span>'}</p>`;
     } catch (e) { html += '<p class="mut">public_manifest.sha256 nelze načíst.</p>'; }
   }
-  html += '<p class="mut">Veřejná verze je odvozený pohled: jména osob nahrazena rolemi, zdrojové podklady vynechány.</p>';
+  html += '<p class="mut">Veřejná verze je odvozený pohled: osoby zhotovitele uvedeny rolí, zdrojové podklady vynechány.</p>';
   $("integ").innerHTML = html;
 })();
 $("soubory").onchange = async e => {
