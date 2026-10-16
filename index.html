@@ -64,16 +64,21 @@ details.prazdne{margin-top:10px;font-size:12px}details.prazdne summary{cursor:po
 <aside>
   <div class="card">
     <h2>Kalendář <span class="mut">(od nejnovějšího)</span></h2>
-    <div class="legend"><span><i style="background:var(--t-prac)"></i>pracovní</span><span><i style="background:var(--t-nep)"></i>nepracovalo</span><span><i style="background:var(--t-sv)"></i>svátek</span><span><i style="background:var(--t-neu)"></i>bez záznamu</span><!--PODANI-OD--><span><i style="background:var(--bad)"></i>čeká na objednatele</span><!--PODANI-DO--></div>
+    <div class="legend"><span><i style="background:var(--t-prac)"></i>pracovní</span><span><i style="background:var(--t-nep)"></i>nepracovalo</span><span><i style="background:var(--t-sv)"></i>svátek</span><span><i style="background:var(--t-neu)"></i>nedoloženo (bez záznamu)</span><!--PODANI-OD--><span><i style="background:var(--bad)"></i>čeká na objednatele</span><!--PODANI-DO--></div>
     <div id="cal"></div>
   </div>
   <details class="card">
     <summary><h2>Hledání a filtry</h2></summary>
     <input type="search" id="q" placeholder="Fulltext (bez diakritiky stačí)…">
     <h3>Období</h3>
-    <div class="row"><input type="date" id="od"><input type="date" id="do"></div>
+    <div class="row"><label>od <input type="date" id="od"></label><label>do <input type="date" id="do"></label></div>
+    <select id="preset" aria-label="Předvolba období">
+      <option value="30">posledních 30 dní</option><option value="tyden">tento týden</option><option value="mtyden">minulý týden</option>
+      <option value="mesic">tento měsíc</option><option value="mmesic">minulý měsíc</option><option value="vse">celé období</option><option value="vlastni">vlastní</option>
+    </select>
     <div class="arch-note mut" id="archNote"></div>
     <div class="row"><button id="b30">Posledních 30 dní</button><button id="barch">Včetně archivu</button></div>
+    <label><input type="checkbox" id="f-tep"> jen dny s teplotou mimo limit montáže</label>
     <h3>Typ záznamu</h3>
     <select id="typ"><option value="">vše</option></select>
     <label><input type="checkbox" id="f-prek"> jen s překážkou / pokynem</label>
@@ -95,11 +100,11 @@ details.prazdne{margin-top:10px;font-size:12px}details.prazdne summary{cursor:po
 </aside>
 <section>
   <div class="card" id="detailCard"><h2 id="detH">Detail dne</h2><div id="detail" class="mut">Vyber den v kalendáři.</div></div>
-  <!--PODANI-OD--><div class="card">
-    <h2>Revize a schvalování objednatelem <span id="podN" class="mut"></span></h2>
+  <!--PODANI-OD--><details class="card" id="podCard">
+    <summary><h2>Revize a schvalování objednatelem <span id="podN" class="mut"></span></h2></summary>
     <div class="kpis" id="podK"></div>
     <div id="podList" class="mut">Přehled podání nebyl vygenerován (build_podani.py).</div>
-  </div><!--PODANI-DO-->
+  </details><!--PODANI-DO-->
   <div class="card" id="galCard" hidden><h2>Fotodokumentace <span id="galN" class="mut"></span></h2><div class="gal" id="gal"></div><button id="galAll">Zobrazit všechny</button></div>
   <details class="card"><summary><h2>Statistiky výběru <span class="mut">(měřeno z textu záznamů)</span></h2></summary><div class="kpis" id="kpis"></div></details>
   <details class="card"><summary><h2>Grafy</h2></summary><div class="charts" id="charts"></div></details>
@@ -131,6 +136,28 @@ const DRUH = {podani: "podání", urgence: "urgence", vyjadreni: "vyjádření",
 // výchozí okno = posledních 30 dní; starší záznamy jsou zálohované (archiv), data se nemění
 const addD = (iso, n) => { const t = new Date(iso + "T12:00"); t.setDate(t.getDate() + n); return t.toISOString().slice(0, 10); };
 const OD30 = [addD(D.obdobi[1], -29), D.obdobi[0]].sort()[1];
+// předvolby období vztažené ke konci dat (D.obdobi[1]); výsledek se ořízne na rozsah dat
+const clamp = iso => iso < D.obdobi[0] ? D.obdobi[0] : iso > D.obdobi[1] ? D.obdobi[1] : iso;
+function presetRange(p) {
+  const e = D.obdobi[1], t = new Date(e + "T12:00"), dow = (t.getDay() + 6) % 7, po = addD(e, -dow), m1 = e.slice(0, 8) + "01";
+  const pm = addD(m1, -1);
+  const r = {"30": [OD30, e], tyden: [po, addD(po, 6)], mtyden: [addD(po, -7), addD(po, -1)], mesic: [m1, e],
+    mmesic: [pm.slice(0, 8) + "01", pm], vse: [D.obdobi[0], e]}[p];
+  return r && r.map(clamp);
+}
+function presetOf(od, d) { return ["30", "tyden", "mtyden", "mesic", "mmesic", "vse"].find(p => { const r = presetRange(p); return r[0] === od && r[1] === d; }) || "vlastni"; }
+// stav období a teplotního filtru v URL hash: #od=2026-07-01&do=2026-07-31&t=1
+function toHash() {
+  const h = `od=${$("od").value}&do=${$("do").value}` + ($("f-tep").checked ? "&t=1" : "");
+  if (location.hash.slice(1) !== h) history.replaceState(null, "", "#" + h);
+}
+function fromHash() {
+  const p = new URLSearchParams(location.hash.slice(1)), ok = s => /^\d{4}-\d{2}-\d{2}$/.test(s || "");
+  if (ok(p.get("od"))) $("od").value = clamp(p.get("od"));
+  if (ok(p.get("do"))) $("do").value = clamp(p.get("do"));
+  if ($("od").value > $("do").value) $("do").value = $("od").value;
+  $("f-tep").checked = p.get("t") === "1";
+}
 
 // ---------- hlavička ----------
 const I = D.identifikace;
@@ -158,6 +185,7 @@ function filtered() {
     if ($("f-prek").checked && !o.prekazka) return false;
     if ($("f-jedn").checked && !o.jednani) return false;
     if ($("f-foto").checked && !o.fotky) return false;
+    if ($("f-tep").checked && !(o.stats && o.stats.teplota_mimo_limit)) return false;
     /*PODANI-OD*/if ($("f-pod")?.checked && !podDen(r.datum).length) return false;/*PODANI-DO*/
     if (ob.length && !ob.some(v => o.objekty.includes(v.slice(-1)))) return false;
     if (pr.length && !pr.some(v => o.profese.includes(v))) return false;
@@ -203,7 +231,8 @@ function cal(vis) {
       let cls = "d" + (inP ? " in" : "") + (inP && iso < OD30 ? " arch" : "");
       /*PODANI-OD*/const pd = inP ? podDen(iso) : []; if (pd.length) cls += " red";/*PODANI-DO*/
       if (r) cls += " rec " + ({"pracovní den":"prac","státní svátek":"sv"}[r.odvozeno.typ] || "nep") + (ids.has(iso) ? "" : " off") + (sel === iso ? " sel" : "");
-      let tip = (r ? r.odvozeno.typ : inP ? "bez záznamu" : "") + (inP && iso < OD30 ? " · archiv" : "");
+      const tl = r && r.odvozeno.stats && r.odvozeno.stats.teplota_mimo_limit;
+      let tip = (r ? r.odvozeno.typ : inP ? "nedoloženo (bez záznamu deníku)" : "") + (tl ? ` · teplota ${tl === "nad" ? "nad" : "pod"} limitem montáže (max ${num(r.odvozeno.stats.t_max)} °C)` : "") + (inP && iso < OD30 ? " · archiv" : "");
       /*PODANI-OD*/if (pd.length) tip += `\nČeká na objednatele (${pd.length}):\n` + pd.map(p => "• " + p.nazev).join("\n");/*PODANI-DO*/
       html += `<div class="${cls}" ${r ? `data-d="${iso}" ` : ""}title="${esc(tip)}">${d.getDate()}</div>`;
     }
@@ -302,7 +331,14 @@ function kpis(vis) {
   const k = [["záznamů", vis.length], ["pracovních dní", s.filter(d => d.pracovalo).length], ["m² obklad", num(sum("m2_obklad"))], ["m² izolace", num(sum("m2_izolace"))],
     ["m² jiné", num(sum("m2_jine"))], ["osobodny", sum("osoby") + ` <small class="mut">(${os.length} dní)</small>`], ["průměr osob/den", os.length ? num(sum("osoby") / os.length) : "–"],
     ["dny se srážkami >1 mm", s.filter(d => (d.srazky_mm || 0) > 1).length], ["překážky / pokyny", sum("prekazky")], ["dny s jednáním", sum("jednani")], ["fotky", sum("foto")]];
-  $("kpis").innerHTML = k.map(([l, v]) => `<div class="kpi"><b>${v}</b>${l}</div>`).join("");
+  // kalendářní dny období bez záznamu deníku = nedoloženo (nic se nedopočítává)
+  const od = $("od").value, dd = $("do").value, nDni = Math.round((new Date(dd + "T12:00") - new Date(od + "T12:00")) / 864e5) + 1;
+  const nZaz = new Set(R.filter(r => r.datum >= od && r.datum <= dd).map(r => r.datum)).size;
+  k.splice(1, 0, ["kalendářních dní v období", nDni], ["dní nedoloženo <small class=\"mut\">(bez záznamu)</small>", Math.max(0, nDni - nZaz)]);
+  const L = (D.stats && D.stats.teplotni_limit) || {min: 5, max: 35, zdroj: ""}, mimo = s.filter(d => d.teplota_mimo_limit);
+  k.push([`dny s teplotou mimo limit montáže <small class="mut">(nad ${L.max} °C: ${mimo.filter(d => d.teplota_mimo_limit === "nad").length}, pod ${L.min} °C: ${mimo.filter(d => d.teplota_mimo_limit === "pod").length}, bez teploty: ${s.filter(d => d.t_max == null).length})</small>`, mimo.length]);
+  $("kpis").innerHTML = k.map(([l, v]) => `<div class="kpi"><b>${v}</b>${l}</div>`).join("")
+    + `<p class="mut" style="grid-column:1/-1">Limit montáže: ${esc(L.zdroj)}. Vlajka z denního maxima teploty vzduchu v záznamu (pod limitem = celý den pod +${L.min} °C); teplota podkladu se neměřila. Vlajka neříká, zda se ten den pracovalo.</p>`;
 }
 function bars(title, vis, series, opt = {}) {
   const W = 360, H = 170, L = 30, B = 28, T = 8, n = vis.length || 1, bw = (W - L - 4) / n;
@@ -331,6 +367,8 @@ function charts(vis) {
 }
 
 function render() {
+  if ($("od").value > $("do").value) $("do").value = $("od").value;
+  $("preset").value = presetOf($("od").value, $("do").value); toHash();
   const vis = filtered();
   if (sel && !vis.some(r => r.datum === sel)) sel = null;
   $("pocet").textContent = `Zobrazeno ${vis.length} z ${R.length} záznamů.`;
@@ -344,6 +382,9 @@ document.addEventListener("click", e => { const d = e.target.closest("[data-d]")
   if (sel < $("od").value) $("od").value = D.obdobi[0];  // den z archivu: rozšířit období, ať jde zobrazit
   render(); $("detailCard").scrollIntoView({behavior: "smooth", block: "start"}); } });
 $("galAll").onclick = () => galerie(true);
+// předvolba se nastaví dřív, než obecný posluchač na <aside> zavolá render()
+$("preset").addEventListener("input", () => { const r = presetRange($("preset").value); if (r) [$("od").value, $("do").value] = r; });
+window.addEventListener("hashchange", () => { fromHash(); render(); });
 $("b30").onclick = () => { $("od").value = OD30; $("do").value = D.obdobi[1]; render(); };
 $("barch").onclick = () => { $("od").value = D.obdobi[0]; render(); };
 $("reset").onclick = () => { $("q").value = ""; $("od").value = OD30; $("do").value = D.obdobi[1]; $("typ").value = "";
@@ -405,6 +446,7 @@ $("soubory").onchange = async e => {
 
 /*PODANI-OD*/podPanel();/*PODANI-DO*/
 sel = [...R].reverse().find(r => r.datum <= D.obdobi[1])?.datum || null;  // výchozí: nejnovější den
+if (location.hash.length > 1) fromHash();  // sdílený odkaz s obdobím
 galerie(false);
 render();
 </script>
