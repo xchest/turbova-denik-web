@@ -45,6 +45,7 @@ svg text{fill:var(--mut);font-size:10px}.charts svg{max-height:210px;display:blo
 .pod ul{margin:4px 0 0 18px;padding:0}.pod li{margin:2px 0}.red{color:var(--bad);font-weight:600}
 .arch-note{font-size:12px;margin:6px 0}
 details.card>summary{cursor:pointer;list-style:none}details.card>summary h2{display:inline;margin:0}details.card>summary::before{content:"▸ ";color:var(--mut)}details.card[open]>summary::before{content:"▾ "}details.card[open]>summary{margin-bottom:10px}
+details.starsi>summary{cursor:pointer;color:var(--mut);font-size:13px;margin:6px 0}
 details.prazdne{margin-top:10px;font-size:12px}details.prazdne summary{cursor:pointer;color:var(--mut)}
 .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;margin:6px 0}.gal img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:4px;display:block}
 .gal figure{margin:0;cursor:pointer}.gal figcaption{font-size:11px;color:var(--mut)}
@@ -187,10 +188,13 @@ function cal(vis) {
   let html = "";
   const mesice = [];  // od nejnovějšího měsíce
   for (let m = new Date(od.getFullYear(), od.getMonth(), 1, 12); m <= dd; m = new Date(m.getFullYear(), m.getMonth() + 1, 1, 12)) mesice.unshift(m);
-  for (const m of mesice) {
-    html += `<h3>${m.toLocaleDateString("cs-CZ", {month: "long", year: "numeric"})}</h3><div class="cal">` + ["po","út","st","čt","pá","so","ne"].map(h => `<div class="h">${h}</div>`).join("");
-    html += "<div></div>".repeat((m.getDay() + 6) % 7);
-    for (let d = new Date(m); d.getMonth() === m.getMonth(); d.setDate(d.getDate() + 1)) {
+  mesice.forEach((m, i) => {
+    if (i === 2) html += `<details class="starsi"><summary>Starší měsíce (${mesice.length - 2})</summary>`;
+    // dny obráceně (od posledního dne měsíce), týden ne→po, aby měsíce pohledově navazovaly
+    const posl = new Date(m.getFullYear(), m.getMonth() + 1, 0, 12);
+    html += `<h3>${m.toLocaleDateString("cs-CZ", {month: "long", year: "numeric"})}</h3><div class="cal">` + ["ne","so","pá","čt","st","út","po"].map(h => `<div class="h">${h}</div>`).join("");
+    html += "<div></div>".repeat((7 - posl.getDay()) % 7);
+    for (let d = posl; d.getMonth() === m.getMonth(); d = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1, 12)) {
       const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
       const r = by[iso], inP = iso >= D.obdobi[0] && iso <= D.obdobi[1];
       let cls = "d" + (inP ? " in" : "") + (inP && iso < OD30 ? " arch" : "");
@@ -201,8 +205,11 @@ function cal(vis) {
       html += `<div class="${cls}" ${r ? `data-d="${iso}" ` : ""}title="${esc(tip)}">${d.getDate()}</div>`;
     }
     html += "</div>";
-  }
+  });
+  if (mesice.length > 2) html += "</details>";
+  const otevreno = document.querySelector("#cal details.starsi")?.open;
   $("cal").innerHTML = html;
+  if (otevreno || $("cal").querySelector("details.starsi .sel")) $("cal").querySelector("details.starsi").open = true;
 }
 
 // ---------- seznam a detail ----------
