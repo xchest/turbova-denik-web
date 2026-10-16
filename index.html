@@ -51,13 +51,14 @@ details.prazdne{margin-top:10px;font-size:12px}details.prazdne summary{cursor:po
 .gal figure{margin:0;cursor:pointer}.gal figcaption{font-size:11px;color:var(--mut)}
 #print{display:none}
 @media print{body>*:not(#print){display:none!important}#print{display:block}.pday{page-break-inside:avoid;border-top:1px solid #999;padding:6px 0}dl{grid-template-columns:200px 1fr}mark{background:none}}
+.pril{margin:6px 0;padding:6px;border:1px solid var(--line);border-radius:6px}.pril img{max-width:220px;max-height:160px;margin:4px 6px 0 0;border:1px solid var(--line)}
 </style>
 </head>
 <body>
 <header>
   <h1 id="stavba">Stavební deník</h1>
   <div class="mut" id="ident"></div>
-  <div style="margin-top:6px"><span class="int">Veřejná verze – zhotovitel uveden rolí, bez zdrojových podkladů</span> <span class="mut" id="gen"></span></div>
+  <div style="margin-top:6px"><span class="int">Veřejná verze – osoby zhotovitele uvedeny rolí, bez zdrojových podkladů</span> <span class="mut" id="gen"></span></div>
 </header>
 <main>
 <aside>
@@ -107,7 +108,7 @@ details.prazdne{margin-top:10px;font-size:12px}details.prazdne summary{cursor:po
 </main>
 <div id="print"></div>
 <script src="data.js"></script>
-<!--PODANI-OD--><script src="podani.js"></script><!--PODANI-DO-->
+<!--PODANI-OD--><script src="podani.js"></script><script src="prilohy.js"></script><!--PODANI-DO-->
 <script>
 "use strict";
 const D = window.DENIK;
@@ -122,7 +123,9 @@ let sel = null;
 const P = (window.PODANI || {polozky: []}).polozky;
 const podDen = d => P.filter(p => p.dny.includes(d));
 const KANAL = {email: "e-mail", telefon: "telefon", WA: "zpráva", osobne: "osobně", dopis: "dopis", jiny: "jiný kanál"};
-const SMER = {"my->objednatel": "zhotovitel → objednatel", "objednatel->my": "objednatel → zhotovitel", interni: "interně"};
+const SMER = {"my->objednatel": "zhotovitel → objednatel", "objednatel->my": "objednatel → zhotovitel", "TDI->my": "TDI → zhotovitel", "statik->my": "statik objednatele → zhotovitel", interni: "interně"};
+// přílohy TDI (výkresy s poznámkami TDI): náhled k rozkliknutí + plné znění poznámek
+const pril = u => (u.prilohy || []).map(k => { const x = (window.PRILOHY || {})[k]; if (!x) return ""; return `<div class="pril"><b>Dokumentace ${esc(k.replace("KD", "KD "))}</b> – výkres zhotovitele s poznámkami TDI (klikněte pro plnou velikost)<div>${x.strany.map((s, i) => `<a href="${esc(s)}" target="_blank" rel="noopener"><img src="${esc(s)}" alt="${esc(k)} strana ${i + 1}" loading="lazy"></a>`).join("")}</div>${x.poznamky_TDI.length ? `<ul class="mut">${x.poznamky_TDI.map(n => `<li>s. ${n.strana}: „${esc(n.text)}“</li>`).join("")}</ul>` : ""}</div>`; }).join("");
 const DRUH = {podani: "podání", urgence: "urgence", vyjadreni: "vyjádření", zminka: "zmínka"};
 /*PODANI-DO*/
 // výchozí okno = posledních 30 dní; starší záznamy jsou zálohované (archiv), data se nemění
@@ -236,10 +239,10 @@ function pod(p, den) {
   const ref = x => x.raw ? ` – <code title="${esc(x.zdroj || "")}">${esc(x.raw)}</code>` : "";
   const n = (druh, smer) => ud.filter(u => u.druh === druh && (!smer || u.smer === smer)).length;
   return `<details class="pod${vyr ? " done" : ""}"><summary><b class="t">${esc(p.nazev)}</b> <span class="tag">${vyr ? "vyřízeno" : "čeká – pending"}</span><span class="tag">${esc(p.typ_text)}</span>${p.objekt ? `<span class="tag">obj. ${esc(p.objekt)}</span>` : ""}
-    <div>Od ${fmtD(p.vznik.datum)} · ${stav} · trvá ${p.dny.length} dní · podání / revize: <b>${n("podani")}</b> · urgence zhotovitele: <b>${n("urgence", "my->objednatel")}</b> · vyjádření objednatele: <b>${n("vyjadreni", "objednatel->my")}</b></div></summary>
+    <div>Od ${fmtD(p.vznik.datum)} · ${stav} · trvá ${p.dny.length} dní · podání / revize: <b>${n("podani")}</b> · urgence zhotovitele: <b>${n("urgence", "my->objednatel")}</b> · vyjádření objednatele: <b>${n("vyjadreni", "objednatel->my")}</b> · vyjádření TDI: <b>${n("vyjadreni", "TDI->my")}</b></div></summary>
     <div class="mut">Vznik: „${esc(p.vznik.citace)}“${ref(p.vznik)}</div>
-    <ul>${ud.map(u => `<li><b>${fmtD(u.datum)}</b> ${esc(KANAL[u.kanal] || u.kanal)} · ${esc(SMER[u.smer] || u.smer)} · ${esc(DRUH[u.druh] || u.druh)} · ${esc(u.text)}<br><span class="mut">„${esc(u.citace)}“${ref(u)}</span></li>`).join("")}</ul>
-    ${vyr ? `<div class="mut">Vyřešení: „${esc(p.vyreseni.citace)}“${ref(p.vyreseni)}</div>` : ""}${p.jistota === "nizka" ? '<div class="mut">jistota nízká: ' + esc(p.poznamka) + "</div>" : ""}</details>`;
+    <ul>${ud.map(u => `<li><b>${fmtD(u.datum)}</b> ${esc(KANAL[u.kanal] || u.kanal)} · ${esc(SMER[u.smer] || u.smer)} · ${esc(DRUH[u.druh] || u.druh)} · ${esc(u.text)}<br><span class="mut">„${esc(u.citace)}“${ref(u)}</span>${pril(u)}</li>`).join("")}</ul>
+    ${vyr ? `<div class="mut">Vyřešení: „${esc(p.vyreseni.citace)}“${ref(p.vyreseni)}</div>` : ""}${p.poznamka ? `<div class="mut">${p.jistota === "nizka" ? "jistota nízká: " : "Poznámka: "}${esc(p.poznamka)}</div>` : ""}</details>`;
 }
 function podPanel() {
   if (!window.PODANI) return;
@@ -247,7 +250,7 @@ function podPanel() {
   const c = (druh, smer) => U.filter(u => u.druh === druh && (!smer || u.smer === smer)).length;
   $("podN").textContent = `(stav ke dni ${fmtD(window.PODANI.korpus_do)})`;
   $("podK").innerHTML = [["čeká na schválení (pending)", otv.length], ["vyřízeno", P.length - otv.length], ["podání / revize", c("podani")],
-    ["urgence zhotovitele", c("urgence", "my->objednatel")], ["vyjádření objednatele", c("vyjadreni", "objednatel->my")],
+    ["urgence zhotovitele", c("urgence", "my->objednatel")], ["vyjádření objednatele", c("vyjadreni", "objednatel->my")], ["vyjádření TDI", c("vyjadreni", "TDI->my")],
     ["dní čekání (otevřené)", otv.reduce((a, p) => a + p.dny.length, 0)]].map(([l, v]) => `<div class="kpi"><b>${v}</b>${l}</div>`).join("");
   $("podList").className = "";
   $("podList").innerHTML = [...otv, ...P.filter(p => !p.otevreno)].map(p => pod(p, null)).join("") || '<p class="mut">Žádná položka.</p>';
