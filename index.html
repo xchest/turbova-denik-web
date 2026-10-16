@@ -39,6 +39,11 @@ mark{background:#ffe08a;color:#000}
 code{font-size:12px;word-break:break-all}
 .charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px}
 svg text{fill:var(--mut);font-size:10px}.charts svg{max-height:210px;display:block}
+.cal .d.red{box-shadow:inset 0 -5px 0 var(--bad)}.cal .d.arch{background-image:repeating-linear-gradient(135deg,transparent 0 4px,rgba(0,0,0,.12) 4px 6px)}
+.pod{border-left:4px solid var(--bad);background:color-mix(in srgb,var(--bad) 7%,var(--card));border-radius:4px;padding:8px 10px;margin:6px 0}
+.pod b.t{color:var(--bad)}.pod.done{border-left-color:var(--mut);background:transparent}.pod.done b.t{color:var(--mut)}
+.pod ul{margin:4px 0 0 18px;padding:0}.pod li{margin:2px 0}.red{color:var(--bad);font-weight:600}
+.arch-note{font-size:12px;margin:6px 0}
 #print{display:none}
 @media print{body>*:not(#print){display:none!important}#print{display:block}.pday{page-break-inside:avoid;border-top:1px solid #999;padding:6px 0}dl{grid-template-columns:200px 1fr}mark{background:none}}
 </style>
@@ -56,11 +61,14 @@ svg text{fill:var(--mut);font-size:10px}.charts svg{max-height:210px;display:blo
     <input type="search" id="q" placeholder="Fulltext (bez diakritiky stačí)…">
     <h3>Období</h3>
     <div class="row"><input type="date" id="od"><input type="date" id="do"></div>
+    <div class="arch-note mut" id="archNote"></div>
+    <div class="row"><button id="b30">Posledních 30 dní</button><button id="barch">Včetně archivu</button></div>
     <h3>Typ záznamu</h3>
     <select id="typ"><option value="">vše</option></select>
     <label><input type="checkbox" id="f-prek"> jen s překážkou / pokynem</label>
     <label><input type="checkbox" id="f-jedn"> jen s kontrolou / jednáním</label>
     <label><input type="checkbox" id="f-foto"> jen s fotkou</label>
+    
     <h3>Objekt <span class="mut">(dle textu)</span></h3><div id="objekty"></div>
     <h3>Profese <span class="mut">(dle textu)</span></h3><div id="profese"></div>
     <div class="row" style="margin-top:10px"><button id="reset">Zrušit filtry</button><button class="pri" id="tisk">Tisk / PDF výběru</button></div>
@@ -69,8 +77,9 @@ svg text{fill:var(--mut);font-size:10px}.charts svg{max-height:210px;display:blo
   <div class="card">
     <h2>Kalendář</h2>
     <div id="cal"></div>
-    <div class="legend"><span><i style="background:var(--t-prac)"></i>pracovní</span><span><i style="background:var(--t-nep)"></i>nepracovalo</span><span><i style="background:var(--t-sv)"></i>svátek</span><span><i style="background:var(--t-neu)"></i>bez záznamu</span></div>
+    <div class="legend"><span><i style="background:var(--t-prac)"></i>pracovní</span><span><i style="background:var(--t-nep)"></i>nepracovalo</span><span><i style="background:var(--t-sv)"></i>svátek</span><span><i style="background:var(--t-neu)"></i>bez záznamu</span><span><i class="arch" style="background:var(--t-nep)"></i>archiv (&gt;30 dní)</span></div>
   </div>
+  
   <div class="card">
     <h2>Integrita</h2>
     <div id="integ">Počítám sha256…</div>
@@ -88,6 +97,7 @@ svg text{fill:var(--mut);font-size:10px}.charts svg{max-height:210px;display:blo
 </main>
 <div id="print"></div>
 <script src="data.js"></script>
+
 <script>
 "use strict";
 const D = window.DENIK;
@@ -99,6 +109,10 @@ const num = x => x == null ? "–" : String(Math.round(x*100)/100).replace(".", 
 const R = D.public_raw.trim().split("\n").map(l => JSON.parse(l));
 let sel = null;
 
+// výchozí okno = posledních 30 dní; starší záznamy jsou zálohované (archiv), data se nemění
+const addD = (iso, n) => { const t = new Date(iso + "T12:00"); t.setDate(t.getDate() + n); return t.toISOString().slice(0, 10); };
+const OD30 = [addD(D.obdobi[1], -29), D.obdobi[0]].sort()[1];
+
 // ---------- hlavička ----------
 const I = D.identifikace;
 $("stavba").textContent = "Stavební deník – " + I.stavba;
@@ -106,7 +120,7 @@ $("ident").textContent = `${I.misto} · ${I.predmet} · zhotovitel ${I.zhotovite
 $("gen").textContent = "data vygenerována " + D.vygenerovano.replace("T", " ");
 
 // ---------- filtry ----------
-$("od").value = $("od").min = $("do").min = D.obdobi[0];
+$("od").min = $("do").min = D.obdobi[0]; $("od").value = OD30;
 $("do").value = $("od").max = $("do").max = D.obdobi[1];
 [...new Set(R.map(r => r.odvozeno.typ))].forEach(t => $("typ").insertAdjacentHTML("beforeend", `<option>${esc(t)}</option>`));
 const chk = (box, vals) => vals.forEach(v => $(box).insertAdjacentHTML("beforeend", `<label><input type="checkbox" data-g="${box}" value="${esc(v)}"> ${esc(v)}</label>`));
@@ -125,6 +139,7 @@ function filtered() {
     if ($("f-prek").checked && !o.prekazka) return false;
     if ($("f-jedn").checked && !o.jednani) return false;
     if ($("f-foto").checked && !o.fotky) return false;
+    
     if (ob.length && !ob.some(v => o.objekty.includes(v.slice(-1)))) return false;
     if (pr.length && !pr.some(v => o.profese.includes(v))) return false;
     return q.every(w => hay[i].includes(w));
@@ -161,9 +176,12 @@ function cal(vis) {
     for (let d = new Date(m); d.getMonth() === m.getMonth(); d.setDate(d.getDate() + 1)) {
       const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
       const r = by[iso], inP = iso >= D.obdobi[0] && iso <= D.obdobi[1];
-      let cls = "d" + (inP ? " in" : "");
+      let cls = "d" + (inP ? " in" : "") + (inP && iso < OD30 ? " arch" : "");
+      
       if (r) cls += " rec " + ({"pracovní den":"prac","státní svátek":"sv"}[r.odvozeno.typ] || "nep") + (ids.has(iso) ? "" : " off") + (sel === iso ? " sel" : "");
-      html += `<div class="${cls}" ${r ? `data-d="${iso}" title="${esc(r.odvozeno.typ)}"` : `title="${inP ? "bez záznamu" : ""}"`}>${d.getDate()}</div>`;
+      let tip = (r ? r.odvozeno.typ : inP ? "bez záznamu" : "") + (inP && iso < OD30 ? " · archiv" : "");
+      
+      html += `<div class="${cls}" ${r ? `data-d="${iso}" ` : ""}title="${esc(tip)}">${d.getDate()}</div>`;
     }
     html += "</div>";
   }
@@ -186,7 +204,9 @@ function list(vis) {
     ${r.odvozeno.objekty.map(o => `<span class="tag">obj. ${o}</span>`).join("")}${r.odvozeno.prekazka ? '<span class="tag">pokyn / překážka</span>' : ""}${r.odvozeno.fotky ? `<span class="tag">foto ${r.odvozeno.fotky}</span>` : ""}
     <div class="mut">${hl(snippet(r))}</div></div>`).join("") || '<p class="mut">Filtru neodpovídá žádný záznam.</p>';
 }
-function dl(r) {
+
+function dl(r) { return dlDen(r); }
+function dlDen(r) {
   const sek = [["B.1 Údaje o průběhu prací", "b1"], ["B.2 Pokyny, kontroly, dokumentace", "b2"], ["C Zápis", "c_zapis"]];
   return sek.map(([t, k]) => `<h3>${t}</h3><dl>` + D.pole[k].map(p => `<dt>${esc(D.popisky[p])}</dt><dd>${p === "foto" ? fotky(r) : hl(r[k][p])}</dd>`).join("") + "</dl>").join("")
 ;
@@ -241,12 +261,16 @@ function render() {
   const vis = filtered();
   if (sel && !vis.some(r => r.datum === sel)) sel = null;
   $("pocet").textContent = `Zobrazeno ${vis.length} z ${R.length} záznamů.`;
+  const nArch = R.filter(r => r.datum < OD30).length;
+  $("archNote").textContent = $("od").value >= OD30 ? `Výchozí pohled: posledních 30 dní. Starší záznamy (${nArch}, do ${fmtD(addD(OD30, -1))}) jsou v archivu – zálohováno, data beze změny.` : `Zobrazen i archiv (záznamy starší než 30 dní, zálohované).`;
   cal(vis); list(vis); kpis(vis); charts(vis);
   if (sel) detail(); else { $("detH").textContent = "Detail dne"; $("detail").className = "mut"; $("detail").textContent = "Vyber den v kalendáři nebo v seznamu."; }
 }
 document.addEventListener("input", e => { if (e.target.closest("aside") && e.target.type !== "file") render(); });
 document.addEventListener("click", e => { const d = e.target.closest("[data-d]"); if (d) { sel = d.dataset.d; render(); $("detailCard").scrollIntoView({behavior: "smooth", block: "start"}); } });
-$("reset").onclick = () => { $("q").value = ""; $("od").value = D.obdobi[0]; $("do").value = D.obdobi[1]; $("typ").value = "";
+$("b30").onclick = () => { $("od").value = OD30; $("do").value = D.obdobi[1]; render(); };
+$("barch").onclick = () => { $("od").value = D.obdobi[0]; render(); };
+$("reset").onclick = () => { $("q").value = ""; $("od").value = OD30; $("do").value = D.obdobi[1]; $("typ").value = "";
   document.querySelectorAll("aside input[type=checkbox]").forEach(i => i.checked = false); render(); };
 
 // ---------- tisk vybraného rozsahu ----------
@@ -302,6 +326,7 @@ $("soubory").onchange = async e => {
   }
   $("souboryOut").innerHTML = out.join("");
 };
+
 
 render();
 </script>
