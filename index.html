@@ -106,9 +106,9 @@ details.prazdne{margin-top:10px;font-size:12px}details.prazdne summary{cursor:po
     <div id="podList" class="mut">Přehled podání nebyl vygenerován (build_podani.py).</div>
   </details><!--PODANI-DO-->
   <div class="card" id="galCard" hidden><h2>Fotodokumentace <span id="galN" class="mut"></span></h2><div class="gal" id="gal"></div><button id="galAll">Zobrazit všechny</button></div>
-  <details class="card"><summary><h2>Statistiky výběru <span class="mut">(měřeno z textu záznamů)</span></h2></summary><div class="kpis" id="kpis"></div></details>
-  <details class="card"><summary><h2>Grafy</h2></summary><div class="charts" id="charts"></div></details>
-  <details class="card"><summary><h2>Časová osa</h2></summary><div class="list" id="list"></div></details>
+  <details class="card"><summary><h2>Statistiky výběru <span class="mut">(měřeno z textu záznamů)</span></h2></summary><div class="row obd"><label>od <input type="date" data-sync="od"></label><label>do <input type="date" data-sync="do"></label></div><div class="kpis" id="kpis"></div></details>
+  <details class="card"><summary><h2>Grafy</h2></summary><div class="row obd"><label>od <input type="date" data-sync="od"></label><label>do <input type="date" data-sync="do"></label></div><div class="charts" id="charts"></div></details>
+  <details class="card"><summary><h2>Časová osa <span class="mut" id="osaRozsah">(od nejnovějšího)</span></h2></summary><div class="list" id="list"></div></details>
 </section>
 </main>
 <div id="print"></div>
@@ -175,12 +175,12 @@ chk("profese", [...new Set(R.flatMap(r => r.odvozeno.profese))]);
 const checked = g => [...document.querySelectorAll(`input[data-g=${g}]:checked`)].map(i => i.value);
 const hay = R.map(r => norm([r.datum, fmtD(r.datum), ...Object.values(r.b1), ...Object.values(r.b2), ...Object.values(r.c_zapis)].join(" ")));
 
-function filtered() {
+function filtered(od = $("od").value) {
   const q = norm($("q").value.trim()).split(/\s+/).filter(Boolean);
   const ob = checked("objekty"), pr = checked("profese");
   return R.filter((r, i) => {
     const o = r.odvozeno;
-    if (r.datum < $("od").value || r.datum > $("do").value) return false;
+    if (r.datum < od || r.datum > $("do").value) return false;
     if ($("typ").value && o.typ !== $("typ").value) return false;
     if ($("f-prek").checked && !o.prekazka) return false;
     if ($("f-jedn").checked && !o.jednani) return false;
@@ -255,7 +255,8 @@ function snippet(r) {  // při hledání ukaž úryvek pole se shodou, jinak za�
   return short(r.b1.prace_popis_mnozstvi, 220);
 }
 function list(vis) {
-  $("list").innerHTML = vis.map(r => `<div class="it${sel === r.datum ? " sel" : ""}" data-d="${r.datum}">
+  // časová osa od nejnovějšího (grafy zůstávají chronologicky)
+  $("list").innerHTML = [...vis].reverse().map(r => `<div class="it${sel === r.datum ? " sel" : ""}" data-d="${r.datum}">
     <b>${fmtD(r.datum)}</b> <span class="mut">${r.den_tydne}</span> <span class="tag">${esc(r.odvozeno.typ)}</span>
     ${r.odvozeno.objekty.map(o => `<span class="tag">obj. ${o}</span>`).join("")}${r.odvozeno.prekazka ? '<span class="tag">pokyn / překážka</span>' : ""}<!--PODANI-OD-->${podDen(r.datum).length ? `<span class="tag red">čeká na objednatele ${podDen(r.datum).length}</span>` : ""}<!--PODANI-DO-->${r.odvozeno.fotky ? `<span class="tag">foto ${r.odvozeno.fotky}</span>` : ""}
     <div class="mut">${hl(snippet(r))}</div></div>`).join("") || '<p class="mut">Filtru neodpovídá žádný záznam.</p>';
@@ -264,10 +265,12 @@ function list(vis) {
 function pod(p, den) {
   const ud = p.udalosti.filter(u => !den || u.datum <= den);
   const vyr = p.vyreseni && (!den || p.vyreseni.datum <= den);
-  const stav = vyr ? `vyřešeno ${fmtD(p.vyreseni.datum)} (${esc(p.vyreseni.vysledek || "")})` : (den ? `ke dni ${fmtD(den)} stále otevřeno` : `otevřeno ke dni ${fmtD(window.PODANI.korpus_do)}`);
+  // pohled na dřívější den: položka byla otevřená, ale vyřešení přišlo později – uvést ho, ať nepůsobí jako stále visící
+  const pozdeji = !vyr && p.vyreseni ? ` · vyřešeno později ${fmtD(p.vyreseni.datum)} (${esc(p.vyreseni.vysledek || "")})` : "";
+  const stav = vyr ? `vyřešeno ${fmtD(p.vyreseni.datum)} (${esc(p.vyreseni.vysledek || "")})` : (den ? (pozdeji ? `ke dni ${fmtD(den)} otevřeno${pozdeji}` : `ke dni ${fmtD(den)} stále otevřeno`) : `otevřeno ke dni ${fmtD(window.PODANI.korpus_do)}`);
   const ref = x => x.raw ? ` – <code title="${esc(x.zdroj || "")}">${esc(x.raw)}</code>` : "";
   const n = (druh, smer) => ud.filter(u => u.druh === druh && (!smer || u.smer === smer)).length;
-  return `<details class="pod${vyr ? " done" : ""}"><summary><b class="t">${esc(p.nazev)}</b> <span class="tag">${vyr ? "vyřízeno" : "čeká – pending"}</span><span class="tag">${esc(p.typ_text)}</span>${p.objekt ? `<span class="tag">obj. ${esc(p.objekt)}</span>` : ""}
+  return `<details class="pod${vyr ? " done" : ""}"><summary><b class="t">${esc(p.nazev)}</b> <span class="tag">${vyr ? "vyřízeno" : pozdeji ? "tehdy čekalo – později vyřízeno" : "čeká – pending"}</span><span class="tag">${esc(p.typ_text)}</span>${p.objekt ? `<span class="tag">obj. ${esc(p.objekt)}</span>` : ""}
     <div>Od ${fmtD(p.vznik.datum)} · ${stav} · trvá ${p.dny.length} dní · podání / revize: <b>${n("podani")}</b> · urgence zhotovitele: <b>${n("urgence", "my->objednatel")}</b> · vyjádření objednatele: <b>${n("vyjadreni", "objednatel->my")}</b> · vyjádření TDI: <b>${n("vyjadreni", "TDI->my")}</b></div></summary>
     <div class="mut">Vznik: „${esc(p.vznik.citace)}“${ref(p.vznik)}</div>
     <ul>${ud.map(u => `<li><b>${fmtD(u.datum)}</b> ${esc(KANAL[u.kanal] || u.kanal)} · ${esc(SMER[u.smer] || u.smer)} · ${esc(DRUH[u.druh] || u.druh)} · ${esc(u.text)}<br><span class="mut">„${esc(u.citace)}“${ref(u)}</span>${pril(u)}</li>`).join("")}</ul>
@@ -374,10 +377,16 @@ function render() {
   $("pocet").textContent = `Zobrazeno ${vis.length} z ${R.length} záznamů.`;
   const nArch = R.filter(r => r.datum < OD30).length;
   $("archNote").textContent = $("od").value >= OD30 ? `Výchozí pohled: posledních 30 dní. Starší záznamy (${nArch}, do ${fmtD(addD(OD30, -1))}) jsou v archivu – zálohováno, data beze změny.` : `Zobrazen i archiv (záznamy starší než 30 dní, zálohované).`;
-  cal(vis); list(vis); kpis(vis); charts(vis);
+  // období i přímo u statistik a grafů, zrcadlí #od/#do z filtrů
+  document.querySelectorAll("[data-sync]").forEach(i => { const m = $(i.dataset.sync); i.min = m.min; i.max = m.max; i.value = m.value; });
+  // časová osa vždy alespoň 30 dní zpět od „do“ (kratší období zúží jen kalendář, statistiky a grafy)
+  const od30 = clamp([$("od").value, addD($("do").value, -29)].sort()[0]);
+  $("osaRozsah").textContent = `(od nejnovějšího, ${fmtD(od30)} – ${fmtD($("do").value)})`;
+  cal(vis); list(od30 < $("od").value ? filtered(od30) : vis); kpis(vis); charts(vis);
   if (sel) detail(); else { $("detH").textContent = "Detail dne"; $("detail").className = "mut"; $("detail").textContent = "Vyber den v kalendáři nebo v seznamu."; }
 }
 document.addEventListener("input", e => { if (e.target.closest("aside") && e.target.type !== "file") render(); });
+document.addEventListener("change", e => { const s = e.target.dataset && e.target.dataset.sync; if (s && /^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) { $(s).value = clamp(e.target.value); render(); } });
 document.addEventListener("click", e => { const d = e.target.closest("[data-d]"); if (d && !e.target.closest("a")) { sel = d.dataset.d;
   if (sel < $("od").value) $("od").value = D.obdobi[0];  // den z archivu: rozšířit období, ať jde zobrazit
   render(); $("detailCard").scrollIntoView({behavior: "smooth", block: "start"}); } });
