@@ -123,6 +123,9 @@ const norm = s => String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase
 const fmtD = iso => { const [y,m,d] = iso.split("-"); return `${+d}. ${+m}. ${y}`; };
 const num = x => x == null ? "–" : String(Math.round(x*100)/100).replace(".", ",");
 const R = D.public_raw.trim().split("\n").map(l => JSON.parse(l));
+// konec období = vždy dnešní den (Praha), i když za dnešek ještě není zápis; D.data_do = poslední den dat
+const DNES = new Date().toLocaleDateString("sv-SE", {timeZone: "Europe/Prague"});
+D.data_do = D.obdobi[1]; if (DNES > D.obdobi[1]) D.obdobi[1] = DNES;
 let sel = null;
 /*PODANI-OD*/// položky čekající na objednatele (build_podani.py); den platí od vzniku do vyřešení, otevřené do konce korpusu
 const P = (window.PODANI || {polozky: []}).polozky;
@@ -232,7 +235,7 @@ function cal(vis) {
       /*PODANI-OD*/const pd = inP ? podDen(iso) : []; if (pd.length) cls += " red";/*PODANI-DO*/
       if (r) cls += " rec " + ({"pracovní den":"prac","státní svátek":"sv"}[r.odvozeno.typ] || "nep") + (ids.has(iso) ? "" : " off") + (sel === iso ? " sel" : "");
       const tl = r && r.odvozeno.stats && r.odvozeno.stats.teplota_mimo_limit;
-      let tip = (r ? r.odvozeno.typ : inP ? "nedoloženo (bez záznamu deníku)" : "") + (tl ? ` · teplota ${tl === "nad" ? "nad" : "pod"} limitem montáže (max ${num(r.odvozeno.stats.t_max)} °C)` : "") + (inP && iso < OD30 ? " · archiv" : "");
+      let tip = (r ? r.odvozeno.typ : inP ? (iso > D.data_do ? "zápis za tento den se doplňuje" : "nedoloženo (bez záznamu deníku)") : "") + (tl ? ` · teplota ${tl === "nad" ? "nad" : "pod"} limitem montáže (max ${num(r.odvozeno.stats.t_max)} °C)` : "") + (inP && iso < OD30 ? " · archiv" : "");
       /*PODANI-OD*/if (pd.length) tip += `\nČeká na objednatele (${pd.length}):\n` + pd.map(p => "• " + p.nazev).join("\n");/*PODANI-DO*/
       html += `<div class="${cls}" ${r ? `data-d="${iso}" ` : ""}title="${esc(tip)}">${d.getDate()}</div>`;
     }
@@ -260,6 +263,9 @@ function list(vis) {
     <b>${fmtD(r.datum)}</b> <span class="mut">${r.den_tydne}</span> <span class="tag">${esc(r.odvozeno.typ)}</span>
     ${r.odvozeno.objekty.map(o => `<span class="tag">obj. ${o}</span>`).join("")}${r.odvozeno.prekazka ? '<span class="tag">pokyn / překážka</span>' : ""}<!--PODANI-OD-->${podDen(r.datum).length ? `<span class="tag red">čeká na objednatele ${podDen(r.datum).length}</span>` : ""}<!--PODANI-DO-->${r.odvozeno.fotky ? `<span class="tag">foto ${r.odvozeno.fotky}</span>` : ""}
     <div class="mut">${hl(snippet(r))}</div></div>`).join("") || '<p class="mut">Filtru neodpovídá žádný záznam.</p>';
+  // dnešní den bez zápisu: na začátek osy, aby bylo vidět, že deník je aktuální k dnešku
+  if ($("do").value >= DNES && !R.some(r => r.datum === DNES))
+    $("list").insertAdjacentHTML("afterbegin", `<div class="it"><b>${fmtD(DNES)}</b> <span class="tag">dnes</span><div class="mut">Zápis za dnešní den se doplňuje (deník se aktualizuje denně).</div></div>`);
 }
 /*PODANI-OD*/// blok položky: stav k danému dni (do=den) nebo celkově (do=null); vypisuje každou událost s kanálem a raw pointerem
 function pod(p, den) {
@@ -455,7 +461,8 @@ $("soubory").onchange = async e => {
 
 /*PODANI-OD*/podPanel();/*PODANI-DO*/
 sel = [...R].reverse().find(r => r.datum <= D.obdobi[1])?.datum || null;  // výchozí: nejnovější den
-if (location.hash.length > 1) fromHash();  // sdílený odkaz s obdobím
+// sdílený odkaz s obdobím: „od“ a filtr z adresy, konec vždy dnešek – starý odkaz nesmí skrýt nové zápisy
+if (location.hash.length > 1) { fromHash(); $("do").value = D.obdobi[1]; }
 galerie(false);
 render();
 </script>
